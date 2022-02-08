@@ -59,7 +59,7 @@ Kubernetes 为它管理的工作负载提供了工业级的韧性与弹性，也
 
   :::center
   ![](./images/service-mesh-5.png)
-  图 15-5 服务网格的控制平面通信与数据平面通信（[图片来源](https://philcalcado.com/2017/08/03/pattern_service_mesh.html)）
+  图 15-5 **服务网格的控制平面通信与数据平面通信**（[图片来源](https://philcalcado.com/2017/08/03/pattern_service_mesh.html))
   :::
 
   数据平面与控制平面并不是什么新鲜概念，它最初就是用在计算机网络之中的术语，通常是指网络层次的划分，软件定义网络中将解耦数据平面与控制平面作为其最主要特征之一。服务网格把计算机网络的经典概念引入到程序通信之中，既可以说是对程序通信的一种变革创新，也可以说是对网络通信的一种发展传承。<br/>分离数据平面与控制平面的实质是将“程序”与“网络”进行解耦，将网络可能出现的问题（譬如中断后重试、降级），与可能需要的功能（譬如实现追踪度量）的处理过程从程序中拿出，放到由控制平面指导的数据平面通信中去处理，制造出一种“这些问题在程序间通信中根本不存在”的假象，仿佛网络和远程服务都是完美可靠的。这种完美的假象，让应用之间可以非常简单地交互而不必过多考虑异常情况，也能够在不同的程序框架、不同的云服务提供商环境之间平稳地迁移；同时，还能让管理者能够不依赖程序支持就得到遥测所需的全部信息，能够根据角色、权限进行统一的访问控制，这些都是服务网格的价值所在。
@@ -68,7 +68,7 @@ Kubernetes 为它管理的工作负载提供了工业级的韧性与弹性，也
 
 在“数据平面”和“控制平面”这两节里，笔者会延续服务网格将“程序”与“网络”解耦的思路，介绍几个数据平面通信与控制平面通信中的核心问题是如何解决的。在工业界，数据平面已有 Linkerd、Nginx、Envoy 等产品，控制平面也有 Istio、Open Service Mesh、Consul 等产品，后文中笔者主要是以目前市场占有率最高的 Istio 与 Envoy 为目标进行讲述，但讲述的目的是介绍两种平面通信的技术原理，而不是介绍 Istio 和 Envoy 的功能与用法，这里涉及到的原理在各种服务网格产品中一般都是通用的，并不局限于哪一种具体实现。
 
-数据平面由一系列边车代理所构成，核心职责是转发应用的入站（Inbound）和出站（Outbound）数据包，因此数据平面也有个别名叫[转发平面](https://en.wikipedia.org/wiki/Forwarding_plane)（Forwarding Plane）。同时，为了在不可靠的物理网络中保证程序间通信最大的可靠性，数据平面必须根据控制平面下发策略的指导，在应用无感知的情况下自动完成服务路由、健康检查、负载均衡、认证鉴权、产生监控数据等一系列工作。为了达成上述的工作目标，至少需要妥善解决以下三个关键问题：
+数据平面由一系列边车代理所构成，核心职责是转发应用的入站（Inbound）和出站（Outbound）数据包，因此数据平面也有个别名叫[转发平面](https://en.wikipedia.org/wiki/Forwarding_plane)（Forwarding Plane）。同时，**为了在不可靠的物理网络中保证程序间通信最大的可靠性，数据平面必须根据控制平面下发策略的指导，在应用无感知的情况下自动完成服务路由、健康检查、负载均衡、认证鉴权、产生监控数据等一系列工作**。为了达成上述的工作目标，至少需要妥善解决以下三个关键问题：
 
 - 代理注入：边车代理是如何注入到应用程序中的？
 - 流量劫持：边车代理是如何劫持应用程序的通信流量的？
@@ -81,15 +81,15 @@ Kubernetes 为它管理的工作负载提供了工业级的韧性与弹性，也
 - **基座模式**（Chassis）：这种方式接入的边车代理对程序就是不透明的，它至少会包括一个轻量级的 SDK，通信由 SDK 中的接口去处理。基座模式的好处是在程序代码的帮助下，有可能达到更好的性能，功能也相对更容易实现，但坏处是对代码有侵入性，对编程语言有依赖性。这种模式的典型产品是由华为开源后捐献给 Apache 基金会的[ServiceComb Mesher](https://github.com/apache/servicecomb-mesher)。采用基座模式的接入目前并不属于主流方式，笔者也不展开介绍了。
 - **注入模式**（Injector）：根据注入方式不同，又可以分为：
   - **手动注入模式**：这种接入方式对使用者来说不透明，但对程序来说是透明的。由于边车代理的定义就是一个与应用共享网络名称空间的辅助容器，这天然就契合了 Pod 的设定，因此在 Kubernetes 中要进行手动注入是十分简单的——就只是为 Pod 增加一个额外容器而已，即使没有工具帮助，自己修改 Pod 的 Manifest 也能轻易办到。如果你以前未曾尝试过，不妨找一个 Pod 的配置文件，用`istioctl kube-inject -f YOUR_POD.YAML`命令来查看一下手动注入会对原有的 Pod 产生什么变化。
-  - **自动注入模式**：这种接入方式对使用者和程序都是透明的，也是 Istio 推荐的代理注入方式。在 Kubernetes 中，服务网格一般是依靠“[动态准入控制](https://kubernetes.io/zh/docs/reference/access-authn-authz/extensible-admission-controllers/)”（Dynamic Admission Control）中的[Mutating Webhook](https://kubernetes.io/zh/docs/reference/access-authn-authz/admission-controllers/#mutatingadmissionwebhook)控制器来实现自动注入的。
+  - **自动注入模式**：这种接入方式对使用者和程序都是透明的，也是 Istio 推荐的代理注入方式。**在 Kubernetes 中，服务网格一般是依靠“[动态准入控制](https://kubernetes.io/zh/docs/reference/access-authn-authz/extensible-admission-controllers/)”（Dynamic Admission Control）中的[Mutating Webhook](https://kubernetes.io/zh/docs/reference/access-authn-authz/admission-controllers/#mutatingadmissionwebhook)控制器来实现自动注入的**。
 
 :::quote 额外知识
 
-[istio-proxy](https://github.com/istio/proxy)是 Istio 对 Envoy 代理的包装容器，其中包含用 Golang 编写的`pilot-agent`和用 C++编写的`envoy`两个进程。[pilot-agent](https://istio.io/v1.6/docs/reference/commands/pilot-agent/)进程负责 Envoy 的生命周期管理，譬如启动、重启、优雅退出等，并维护 Envoy 所需的配置信息，譬如初始化配置，随时根据控制平面的指令热更新 Envoy 的配置等。
+**[istio-proxy](https://github.com/istio/proxy)是 Istio 对 Envoy 代理的包装容器，其中包含用 Golang 编写的`pilot-agent`和用 C++编写的`envoy`两个进程。[pilot-agent](https://istio.io/v1.6/docs/reference/commands/pilot-agent/)进程负责 Envoy 的生命周期管理，譬如启动、重启、优雅退出等，并维护 Envoy 所需的配置信息，譬如初始化配置，随时根据控制平面的指令热更新 Envoy 的配置等。**
 
 :::
 
-笔者以 Istio 自动注入边车代理（istio-proxy 容器）的过程为例，介绍一下自动注入的具体的流程。只要对 Istio 有基本了解的同学都知道，对任何设置了`istio-injection=enabled`标签的名称空间，Istio 都会自动为其中新创建的 Pod 注入一个名为 istio-proxy 的容器。之所以能做到自动这一点，是因为 Istio 预先在 Kubernetes 中注册了一个类型为`MutatingWebhookConfiguration`的资源，它的主要内容如下所示：
+笔者以 Istio 自动注入边车代理（istio-proxy 容器）的过程为例，介绍一下自动注入的具体的流程。**只要对 Istio 有基本了解的同学都知道，对任何设置了`istio-injection=enabled`标签的名称空间，Istio 都会自动为其中新创建的 Pod 注入一个名为 istio-proxy 的容器。之所以能做到自动这一点，是因为 Istio 预先在 Kubernetes 中注册了一个类型为`MutatingWebhookConfiguration`的资源，它的主要内容如下所示**：
 
 ```yaml
 apiVersion: admissionregistration.k8s.io/v1beta1
@@ -118,11 +118,11 @@ webhooks:
     - pods
 ```
 
-以上配置告诉 Kubernetes，对于符合标签`istio-injection: enabled`的名称空间，在 Pod 资源进行 CREATE 操作时，应该先自动触发一次 Webhook 调用，调用的位置是`istio-system`名称空间中的服务`istio-sidecar-injector`，调用具体的 URL 路径是`/inject`。在这次调用中，Kubernetes 会把拟新建 Pod 的元数据定义作为参数发送给此 HTTP Endpoint，然后从服务返回结果中得到注入了边车代理的新 Pod 定义，以此自动完成注入。
+**以上配置告诉 Kubernetes，对于符合标签`istio-injection: enabled`的名称空间，在 Pod 资源进行 CREATE 操作时，应该先自动触发一次 Webhook 调用，调用的位置是`istio-system`名称空间中的服务`istio-sidecar-injector`，调用具体的 URL 路径是`/inject`。**在这次调用中，**Kubernetes 会把拟新建 Pod 的元数据定义作为参数发送给此 HTTP Endpoint，然后从服务返回结果中得到注入了边车代理的新 Pod 定义，以此自动完成注入**。
 
 ### 流量劫持
 
-边车代理做流量劫持最典型的方式是基于 iptables 进行的数据转发，笔者曾在“[Linux 网络虚拟化](/immutable-infrastructure/network/linux-vnet.html#干预网络通信)”中介绍过 Netfilter 与 iptables 的工作原理。这里仍然以 Istio 为例，它在注入边车代理后，除了生成封装 Envoy 的 istio-proxy 容器外，还会生成一个 initContainer，它的作用就是自动修改容器的 iptables，具体内容如下所示：
+边车代理做流量劫持最典型的方式是基于 iptables 进行的数据转发，笔者曾在“[Linux 网络虚拟化](/immutable-infrastructure/network/linux-vnet.html#干预网络通信)”中介绍过 Netfilter 与 iptables 的工作原理。这里**仍然以 Istio 为例，它在注入边车代理后，除了生成封装 Envoy 的 istio-proxy 容器外，还会生成一个 initContainer，它的作用就是自动修改容器的 iptables**，具体内容如下所示：
 
 ```yaml
 initContainers:
@@ -132,7 +132,7 @@ initContainers:
   - istio-iptables -p "15001" -z "15006"-u "1337" -m REDIRECT -i '*' -x "" -b '*' -d 15090,15020
 ```
 
-以上命令行中的[istio-iptables](https://github.com/istio/cni/blob/master/tools/packaging/common/istio-iptables.sh)是 Istio 提供的用于配置 iptables 的 Shell 脚本，这行命令的意思是让边车代理拦截所有的进出 Pod 的流量，包括的动作为：拦截除 15090、15020 端口（这两个分别是 Mixer 和 Ingress Gateway 的端口，关于 Istio 占用的固定端口可参考[官方文档](https://istio.io/zh/docs/ops/deployment/requirements/)所列）外的所有入站流量，全部转发至 15006 端口（Envoy 入站端口），经 Envoy 处理后，再从 15001 端口（Envoy 出站端口）发送出去。该命令会在 iptables 中的 PREROUTING 和 OUTPUT 链中挂载相应的转发规则，以使用`iptables -t nat -L -v`命令可以查看到如下所示配置信息：
+以上命令行中的[istio-iptables](https://github.com/istio/cni/blob/master/tools/packaging/common/istio-iptables.sh)是 Istio 提供的用于配置 iptables 的 Shell 脚本，这行命令的意思是让边车代理拦截所有的进出 Pod 的流量，**包括的动作为：拦截除 15090、15020 端口（这两个分别是 Mixer 和 Ingress Gateway 的端口，关于 Istio 占用的固定端口可参考[官方文档](https://istio.io/zh/docs/ops/deployment/requirements/)所列）外的所有入站流量，全部转发至 15006 端口（Envoy 入站端口），经 Envoy 处理后，再从 15001 端口（Envoy 出站端口）发送出去。**该命令会在 iptables 中的 PREROUTING 和 OUTPUT 链中**挂载相应的转发规则**，可以使用`iptables -t nat -L -v`命令可以查看到如下所示配置信息：
 
 ```bash
 Chain PREROUTING
@@ -178,7 +178,7 @@ Chain ISTIO_REDIRECT (1 references)
 图 15-6 经过 iptables 转发的通信
 :::
 
-这种方案在网络 I/O 不构成主要瓶颈的系统中并没有什么不妥，但在网络敏感的大并发场景下会因转发而损失一定的性能。目前，如何实现更优化的数据平面流量劫持，是服务网格发展的前沿研究课题之一，其中一种可行的优化方案是使用[eBPF](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter)（Extended Berkeley Packet Filter）技术，在 Socket 层面直接完成数据转发，而不需要再往下经过更底层的 TCP/IP 协议栈的处理，从而减少数据在通信链路的路径长度。
+这种方案在网络 I/O 不构成主要瓶颈的系统中并没有什么不妥，但在网络敏感的大并发场景下会因转发而损失一定的性能。目前，如何实现更优化的数据平面流量劫持，是服务网格发展的前沿研究课题之一，**其中一种可行的优化方案是使用[eBPF](https://en.wikipedia.org/wiki/Berkeley_Packet_Filter)（Extended Berkeley Packet Filter）技术，在 Socket 层面直接完成数据转发，而不需要再往下经过更底层的 TCP/IP 协议栈的处理，从而减少数据在通信链路的路径长度**。
 
 :::center
 ![](./images/ebpf.png)
@@ -226,10 +226,10 @@ Chain ISTIO_REDIRECT (1 references)
 
 :::center
 ![](./images/xds.png)
-图 15-8 xDS 协议运作模型
+图 15-8 **xDS 协议运作模型**
 :::
 
-Envoy 的另外一个设计重点是它的 Filter 机制，Filter 通俗地讲就是 Envoy 的插件，通过 Filter 机制 Envoy 提供了强大的可扩展能力，插件不仅是无关重要的外围功能，很多 Envoy 的核心功能都使用 Filter 来实现的。譬如对 HTTP 流量的治理、Tracing 机制、多协议支持，等等。利用 Filter 机制，Envoy 理论上可以实现任意协议的支持以及协议之间的转换，可以对请求流量进行全方位的修改和定制，同时还保持较高的可维护性。
+Envoy 的另外一个设计重点是它的 Filter 机制，Filter 通俗地讲就是 Envoy 的插件，通过 Filter 机制 Envoy 提供了强大的可扩展能力，插件不仅是无关重要的外围功能，**很多 Envoy 的核心功能都使用 Filter 来实现的。譬如对 HTTP 流量的治理、Tracing 机制、多协议支持，等等。**利用 Filter 机制，Envoy 理论上可以实现任意协议的支持以及协议之间的转换，可以对请求流量进行全方位的修改和定制，同时还保持较高的可维护性。
 
 ## 控制平面
 
@@ -242,7 +242,7 @@ Istio 在 1.5 版本之前，Istio 自身也是采用微服务架构开发的，
 图 15-9 Istio 1.5 版本之后的架构（图片来自[Istio 官方文档](https://istio.io/latest/docs/ops/deployment/architecture/)）
 :::
 
-从 1.5 版本起，Istio 重新回归单体架构，将 Pilot、Galley、Citadel 的功能全部集成到新的 Istiod 之中。当然，这也并不是说完全推翻之前的设计，只是将原有的多进程形态优化成单进程的形态，之前各个独立组件变成了 Istiod 的内部逻辑上的子模块而已。单体化之后出现的新进程 Istiod 就承担所有的控制平面职责，具体包括有：
+从 1.5 版本起，Istio 重新回归单体架构，将 Pilot、Galley、Citadel 的功能全部集成到新的 Istiod 之中。当然，这也并不是说完全推翻之前的设计，只是将原有的多进程形态优化成单进程的形态，之前各个独立组件变成了 Istiod 的内部逻辑上的子模块而已。**单体化之后出现的新进程 Istiod 就承担所有的控制平面职责，具体包括有：**
 
 - **数据平面交互**：这是部分是满足服务网格正常工作所需的必要工作，具体有：
   - **边车注入**：在 Kubernetes 中注册 Mutating Webhook 控制器，实现代理容器的自动注入，并生成 Envoy 的启动配置信息。

@@ -26,7 +26,7 @@ PKI 是构建[传输安全层](https://en.wikipedia.org/wiki/Transport_Layer_Sec
 
 ### 服务认证
 
-Istio 版本的 Fenix's Bookstore 采用了双向 TLS 认证作为服务调用双方的身份认证手段。得益于 Istio 提供的基础设施的支持，令我们不需要 Google Front End、Application Layer Transport Security 这些安全组件，也不需要部署 PKI 和 CA，甚至无需改动任何代码就可以启用 mTLS 认证。不过，Istio 毕竟是新生事物，你准备在自己的生产系统中启用 mTLS 之前，要先想一下是否整个服务集群全部节点都受 Istio 管理？如果每一个服务提供者、调用者均受 Istio 管理，那 mTLS 就是最理想的认证方案。你只需要参考以下简单的 PeerAuthentication [CRD](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)配置，即可对某个[Kubernetes 名称空间](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/)范围内所有的流量均启用 mTLS：
+**Istio 版本的 Fenix's Bookstore 采用了双向 TLS 认证作为服务调用双方的身份认证手段。得益于 Istio 提供的基础设施的支持，令我们不需要 Google Front End、Application Layer Transport Security 这些安全组件，也不需要部署 PKI 和 CA，甚至无需改动任何代码就可以启用 mTLS 认证。**不过，Istio 毕竟是新生事物，你准备在自己的生产系统中启用 mTLS 之前，要先想一下是否整个服务集群全部节点都受 Istio 管理？如果每一个服务提供者、调用者均受 Istio 管理，那 mTLS 就是最理想的认证方案。你只需要参考以下简单的 PeerAuthentication [CRD](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)配置，即可对某个[Kubernetes 名称空间](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/)范围内所有的流量均启用 mTLS：
 
 ```yaml
 apiVersion: security.istio.io/v1beta1

@@ -1,6 +1,6 @@
 # Linux 网络虚拟化
 
-Linux 目前提供的八种名称空间里，网络名称空间无疑是隔离内容最多的一种，它为名称空间内的所有进程提供了全套的网络设施，包括独立的设备界面、路由表、ARP 表，IP 地址表、iptables/ebtables 规则、协议栈，等等。虚拟化容器是以 Linux 名称空间的隔离性为基础来实现的，那解决隔离的容器之间、容器与宿主机之间、乃至跨物理网络的不同容器间通信问题的责任，很自然也落在了 Linux 网络虚拟化技术的肩上。本节里，我们暂时放下容器编排、云原生、微服务等这些上层概念，走入 Linux 网络的底层世界，去学习一些与设备、协议、通信相关的基础网络知识。
+Linux 目前提供的八种名称空间里，网络名称空间无疑是隔离内容最多的一种，它为名称空间内的所有进程提供了全套的网络设施，**包括独立的设备界面、路由表、ARP 表，IP 地址表、iptables/ebtables 规则、协议栈，等等**。虚拟化容器是以 Linux 名称空间的隔离性为基础来实现的，那解决隔离的容器之间、容器与宿主机之间、乃至跨物理网络的不同容器间通信问题的责任，很自然也落在了 Linux 网络虚拟化技术的肩上。本节里，我们暂时放下容器编排、云原生、微服务等这些上层概念，走入 Linux 网络的底层世界，去学习一些与设备、协议、通信相关的基础网络知识。
 
 本节的阅读对象设定为以实现业务功能为主、平常并不直接接触网络设备的普通开发人员，对于平台基础设施的开发者或者运维人员，可能会显得有点过于啰嗦或过于基础了，如果你已经提前掌握了这些知识，完全可以快速阅读，或者直接跳过部分内容。
 
@@ -13,14 +13,14 @@ Linux 目前提供的八种名称空间里，网络名称空间无疑是隔离�
 图 12-1 Linux 系统下的网络通信模型
 :::
 
-图中传输模型的左侧，笔者特别标示出了网络栈在用户与内核空间的部分，可见几乎整个网络栈（应用层以下）都位于系统内核空间之中，之所以采用这种设计，主要是从数据安全隔离的角度出发来考虑的。由内核去处理网络报文的收发，无疑会有更高的执行开销，譬如数据在内核态和用户态之间来回拷贝的额外成本，因此会损失一些性能，但是能够保证应用程序无法窃听到或者去伪造另一个应用程序的通信内容。针对特别关注收发性能的应用场景，也有直接在用户空间中实现全套协议栈的旁路方案，譬如开源的[Netmap](https://github.com/luigirizzo/netmap)以及 Intel 的[DPDK](https://en.wikipedia.org/wiki/Data_Plane_Development_Kit)，都能做到零拷贝收发网络数据包。
+图中传输模型的左侧，笔者特别标示出了网络栈在用户与内核空间的部分，可见几乎整个网络栈（应用层以下）都位于系统内核空间之中，之所以采用这种设计，主要是从数据安全隔离的角度出发来考虑的。由内核去处理网络报文的收发，无疑会有更高的执行开销，譬如数据在内核态和用户态之间来回拷贝的额外成本，因此会损失一些性能，**但是能够保证应用程序无法窃听到或者去伪造另一个应用程序的通信内容**。针对特别关注收发性能的应用场景，也有直接在用户空间中实现全套协议栈的旁路方案，**譬如开源的[Netmap](https://github.com/luigirizzo/netmap)以及 Intel 的[DPDK](https://en.wikipedia.org/wiki/Data_Plane_Development_Kit)，都能做到零拷贝收发网络数据包。**
 
 图中传输模型的箭头展示的是数据流动的方向，它体现了信息从程序中发出以后，到被另一个程序接收到之前，将经历如下几个阶段：
 
 - **Socket**：应用层的程序是通过 Socket 编程接口来和内核空间的网络协议栈通信的。Linux Socket 是从 BSD Socket 发展而来的，现在 Socket 已经不局限于某个操作系统的专属功能，成为各大主流操作系统共同支持的通用网络编程接口，是网络应用程序实际上的交互基础。应用程序通过读写收、发缓冲区（Receive/Send Buffer）来与 Socket 进行交互，在 UNIX 和 Linux 系统中，出于“一切皆是文件”的设计哲学，对 Socket 操作被实现为对文件系统（socketfs）的读写访问操作，通过文件描述符（File Descriptor）来进行。
 - **TCP/UDP**：传输层协议族里最重要的协议无疑是[传输控制协议](https://en.wikipedia.org/wiki/Transmission_Control_Protocol)（Transmission Control Protocol，TCP）和[用户数据报协议](https://en.wikipedia.org/wiki/User_Datagram_Protocol)（User Datagram Protocol，UDP）两种，它们也是在 Linux 内核中被直接支持的协议。此外还有[流控制传输协议](https://en.wikipedia.org/wiki/Stream_Control_Transmission_Protocol)（Stream Control Transmission Protocol，SCTP）、[数据报拥塞控制协议](https://en.wikipedia.org/wiki/Datagram_Congestion_Control_Protocol)（Datagram Congestion Control Protocol，DCCP）等等。<br/>不同的协议处理流程大致是一样的，只是封装的报文以及头、尾部信息会有所不同，这里以 TCP 协议为例，内核发现 Socket 的发送缓冲区中有新的数据被拷贝进来后，会把数据封装为 TCP Segment 报文，常见网络协议的报文基本上都是由报文头（Header）和报文体（Body，也叫荷载“Payload”）两部分组成。系统内核将缓冲区中用户要发送出去的数据作为报文体，然后把传输层中的必要控制信息，譬如代表哪个程序发、由哪个程序收的源、目标端口号，用于保证可靠通信（重发与控制顺序）的序列号、用于校验信息是否在传输中出现损失的校验和（Check Sum）等信息封装入报文头中。
 - **IP**：网络层协议最主要就是[网际协议](https://en.wikipedia.org/wiki/Internet_Protocol)（Internet Protocol，IP），其他还有[因特网组管理协议](https://en.wikipedia.org/wiki/Internet_Group_Management_Protocol)（Internet Group Management Protocol，IGMP）、大量的路由协议（EGP、NHRP、OSPF、IGRP、……）等等。<br/>以 IP 协议为例，它会将来自上一层（本例中的 TCP 报文）的数据包作为报文体，再次加入自己的报文头，譬如指明数据应该发到哪里的路由地址、数据包的长度、协议的版本号，等等，封装成 IP 数据包后发往下一层。关于 TCP 和 IP 协议报文的内容，笔者曾在“[负载均衡](/architect-perspective/general-architecture/diversion-system/load-balancing.html)”中详细讲解过，有需要的读者可以参考。
-- **Device**：网络设备（Device）是网络访问层中面向系统一侧的接口，这里所说的设备与物理硬件设备并不是同一个概念，Device 只是一种向操作系统端开放的接口，其背后既可能代表着真实的物理硬件，也可能是某段具有特定功能的程序代码，譬如即使不存在物理网卡，也依然可以存在回环设备（Loopback Device）。许多网络抓包工具，如[tcpdump](https://en.wikipedia.org/wiki/Tcpdump)、[Wirshark](https://en.wikipedia.org/wiki/Wireshark)便是在此处工作的，前面介绍微服务[流量控制](/distribution/traffic-management/traffic-control.html)时曾提到过的网络流量整形，通常也是在这里完成的。Device 主要的作用是抽象出统一的界面，让程序代码去选择或影响收发包出入口，譬如决定数据应该从哪块网卡设备发送出去；还有就是准备好网卡驱动工作所需的数据，譬如来自上一层的 IP 数据包、[下一跳](<https://en.wikipedia.org/wiki/Hop_(networking)>)（Next Hop）的 MAC 地址（这个地址是通过[ARP Request](https://en.wikipedia.org/wiki/Address_Resolution_Protocol)得到的）等等。
+- **Device**：网络设备（Device）是网络访问层中面向系统一侧的接口，这里所说的设备与物理硬件设备并不是同一个概念，**Device 只是一种向操作系统端开放的接口，其背后既可能代表着真实的物理硬件，也可能是某段具有特定功能的程序代码**，譬如即使不存在物理网卡，也依然可以存在回环设备（Loopback Device）。许多网络抓包工具，如[tcpdump](https://en.wikipedia.org/wiki/Tcpdump)、[Wirshark](https://en.wikipedia.org/wiki/Wireshark)便是在此处工作的，前面介绍微服务[流量控制](/distribution/traffic-management/traffic-control.html)时曾提到过的网络流量整形，通常也是在这里完成的。Device 主要的作用是抽象出统一的界面，让程序代码去选择或影响收发包出入口，譬如决定数据应该从哪块网卡设备发送出去；还有就是准备好网卡驱动工作所需的数据，譬如来自上一层的 IP 数据包、[下一跳](<https://en.wikipedia.org/wiki/Hop_(networking)>)（Next Hop）的 MAC 地址（这个地址是通过[ARP Request](https://en.wikipedia.org/wiki/Address_Resolution_Protocol)得到的）等等。
 - **Driver**：网卡驱动程序（Driver）是网络访问层中面向硬件一侧的接口，网卡驱动程序会通过[DMA](https://en.wikipedia.org/wiki/Direct_memory_access)将主存中的待发送的数据包复制到驱动内部的缓冲区之中。数据被复制的同时，也会将上层提供的 IP 数据包、下一跳 MAC 地址这些信息，加上网卡的 MAC 地址、VLAN Tag 等信息一并封装成为[以太帧](https://en.wikipedia.org/wiki/Ethernet_frame)（Ethernet Frame），并自动计算校验和。对于需要确认重发的信息，如果没有收到接收者的确认（ACK）响应，那重发的处理也是在这里自动完成的。
 
 上面这些阶段是信息从程序中对外发出时经过协议栈的过程，接收过程则是从相反方向进行的逆操作。程序发送数据做的是层层封包，加入协议头，传给下一层；接受数据则是层层解包，提取协议体，传给上一层，你可以类比来理解数据包接收过程，笔者就不再专门列举一遍数据接收步骤了。
@@ -40,7 +40,7 @@ Linux 目前提供的八种名称空间里，网络名称空间无疑是隔离�
 图 12-2 应用收、发数据包所经过的 Netfilter 钩子
 :::
 
-Netfilter 允许在同一个钩子处注册多个回调函数，因此向钩子注册回调函数时必须提供明确的优先级，以便触发时能按照优先级从高到低进行激活。由于回调函数会存在多个，看起来就像挂在同一个钩子上的一串链条，因此钩子触发的回调函数集合就被称为“回调链”（Chained Callbacks），这个名字导致了后续基于 Netfilter 设计的 Xtables 系工具，如稍后介绍的 iptables 均有使用到“链”（Chain）的概念。虽然现在看来 Netfilter 只是一些简单的事件回调机制而已，然而这样一套简单的设计，却成为了整座 Linux 网络大厦的核心基石，Linux 系统提供的许多网络能力，如数据包过滤、封包处理（设置标志位、修改 TTL 等）、地址伪装、网络地址转换、透明代理、访问控制、基于协议类型的连接跟踪，带宽限速，等等，都是在 Netfilter 基础之上实现的。
+Netfilter 允许在同一个钩子处注册多个回调函数，因此向钩子注册回调函数时必须提供明确的优先级，以便触发时能按照优先级从高到低进行激活。由于回调函数会存在多个，看起来就像挂在同一个钩子上的一串链条，因此钩子触发的回调函数集合就被称为“回调链”（Chained Callbacks），这个名字导致了后续基于 Netfilter 设计的 Xtables 系工具，如稍后介绍的 iptables 均有使用到“链”（Chain）的概念。**虽然现在看来 Netfilter 只是一些简单的事件回调机制而已，然而这样一套简单的设计，却成为了整座 Linux 网络大厦的核心基石，Linux 系统提供的许多网络能力，如数据包过滤、封包处理（设置标志位、修改 TTL 等）、地址伪装、网络地址转换、透明代理、访问控制、基于协议类型的连接跟踪，带宽限速，等等，都是在 Netfilter 基础之上实现的。**
 
 以 Netfilter 为基础的应用有很多，其中使用最广泛的毫无疑问要数 Xtables 系列工具，譬如[iptables](https://en.wikipedia.org/wiki/Iptables)、ebtables、arptables、ip6tables 等等。这里面至少 iptables 应该是用过 Linux 系统的开发人员都或多或少会使用过，它常被称为是 Linux 系统“自带的防火墙”，然而 iptables 实际能做的事情已远远超出防火墙的范畴，严谨地讲，比较贴切的定位应是能够代替 Netfilter 多数常规功能的 IP 包过滤工具。iptables 的设计意图是因为 Netfilter 的钩子回调虽然很强大，但毕竟要通过程序编码才能够使用，并不适合系统管理员用来日常运维，而它的价值便是以配置去实现原本用 Netfilter 编码才能做到的事情。iptables 先把用户常用的管理意图总结成具体的行为预先准备好，然后在满足条件时自动激活行为。以下列出了部分 iptables 预置的行为：
 
@@ -55,7 +55,7 @@ Netfilter 允许在同一个钩子处注册多个回调函数，因此向钩子�
 - LOG：在/var/log/messages 文件中记录日志信息。
 - ……
 
-这些行为本来能够被挂载到 Netfilter 钩子的回调链上，但 iptables 又进行了一层额外抽象，不是把行为与链直接挂钩，而是根据这些底层操作根据其目的，先总结为更高层次的规则。举个例子，假设你挂载规则目的是为了实现网络地址转换（NAT），那就应该对符合某种特征的流量（譬如来源于某个网段、从某张网卡发送出去）、在某个钩子上（譬如做 SNAT 通常在 POSTROUTING，做 DNAT 通常在 PREROUTING）进行 MASQUERADE 行为，这样具有相同目的的规则，就应该放到一起才便于管理，由此便形成“规则表”的概念。iptables 内置了五张不可扩展的规则表（其中 security 表并不常用，很多资料只计算了前四张表），如下所列：
+这些行为本来能够被挂载到 Netfilter 钩子的回调链上，但 iptables 又进行了一层额外抽象，不是把行为与链直接挂钩，而是根据这些底层操作根据其目的，先总结为更高层次的规则。举个例子，假设你挂载规则目的是为了实现网络地址转换（NAT），那就应该对符合某种特征的流量（譬如来源于某个网段、从某张网卡发送出去）、在某个钩子上（譬如做 SNAT 通常在 POSTROUTING，做 DNAT 通常在 PREROUTING）进行 MASQUERADE 行为，这样具有相同目的的规则，就应该放到一起才便于管理，由此便形成“规则表”的概念。**iptables 内置了五张不可扩展的规则表（其中 security 表并不常用，很多资料只计算了前四张表），如下所列：**
 
 1. raw 表：用于去除数据包上的[连接追踪机制](https://en.wikipedia.org/wiki/Netfilter#Connection_tracking)（Connection Tracking）。
 2. mangle 表：用于修改数据包的报文头信息，如服务类型（Type Of Service，ToS）、生存周期（Time to Live，TTL）以及为数据包设置 Mark 标记，典型的应用是链路的服务质量管理（Quality Of Service，QoS）。
@@ -82,7 +82,7 @@ Netfilter 允许在同一个钩子处注册多个回调函数，因此向钩子�
 
 从名字上就能看出预置的五条链直接源自于 Netfilter 的钩子，它们与五张规则表的对应关系是固定的，用户不能增加自定义的表，或者修改已有表与链的关系，但可以增加自定义的链，新增的自定义链与 Netfilter 的钩子没有天然的对应关系，换而言之就是不会被自动触发，只有显式使用 JUMP 行为，从默认的五条链中跳转过去才能被执行。
 
-iptables 不仅仅是 Linux 系统自带的一个网络工具，它在容器间通信中扮演相当重要的角色，譬如 Kubernetes 用来管理 Sevice 的 Endpoints 的核心组件 kube-proxy，就依赖 iptables 来完成 ClusterIP 到 Pod 的通信（也可以采用 IPVS，IPVS 同样是基于 Netfilter 的），这种通信的本质就是一种 NAT 访问。对于 Linux 用户，以上都是相当基础的网络常识，但如果你平常较少在 Linux 系统下工作，就可能需要一些用 iptables 充当防火墙过滤数据、充当作路由器转发数据、充当作网关做 NAT 转换的实际例子来帮助理解，由于这些操作在网上很容易就能找到，笔者便不专门去举例说明了。
+iptables 不仅仅是 Linux 系统自带的一个网络工具，它在容器间通信中扮演相当重要的角色，譬如 Kubernetes 用来管理 **Sevice 的 Endpoints 的核心组件 kube-proxy，就依赖 iptables 来完成 ClusterIP 到 Pod 的通信（也可以采用 IPVS，IPVS 同样是基于 Netfilter 的），这种通信的本质就是一种 NAT 访问。**对于 Linux 用户，以上都是相当基础的网络常识，但如果你平常较少在 Linux 系统下工作，就可能需要一些用 iptables 充当防火墙过滤数据、充当作路由器转发数据、充当作网关做 NAT 转换的实际例子来帮助理解，由于这些操作在网上很容易就能找到，笔者便不专门去举例说明了。
 
 行文至此，本章用了两个小节的篇幅去介绍 Linux 下网络通信的协议栈模型，以及程序如何干涉在协议栈中流动的信息，它们与虚拟化并没有什么直接关系，是整个 Linux 网络通信的必要基础。从下一节开始，我们就要开始专注于与网络虚拟化密切相关的内容了。
 
@@ -94,7 +94,7 @@ iptables 不仅仅是 Linux 系统自带的一个网络工具，它在容器间�
 
 目前主流的虚拟网卡方案有[tun/tap](https://www.kernel.org/doc/Documentation/networking/tuntap.txt)和[veth](https://man7.org/linux/man-pages/man4/veth.4.html)两种，在时间上 tun/tap 出现得更早，它是一组通用的虚拟驱动程序包，里面包含了两个设备，分别是用于网络数据包处理的虚拟网卡驱动，以及用于内核空间与用户空间交互的[字符设备](https://en.wikipedia.org/wiki/Device_file#Character_devices)（Character Devices，这里具体指`/dev/net/tun`）驱动。大概在 2000 年左右，Solaris 系统为了实现[隧道协议](https://en.wikipedia.org/wiki/Tunneling_protocol)（Tunneling Protocol）开发了这套驱动，从 Linux Kernel 2.1 版开始移植到 Linux 内核中，当时是源码中的可选模块，2.4 版之后发布的内核都会默认编译 tun/tap 的驱动。
 
-tun 和 tap 是两个相对独立的虚拟网络设备，其中 tap 模拟了以太网设备，操作二层数据包（以太帧），tun 则模拟了网络层设备，操作三层数据包（IP 报文）。使用 tun/tap 设备的目的是实现把来自协议栈的数据包先交由某个打开了`/dev/net/tun`字符设备的用户进程处理后，再把数据包重新发回到链路中。你可以通俗地将它理解为这块虚拟化网卡驱动一端连接着网络协议栈，另一端连接着用户态程序，而普通的网卡驱动则是一端连接则网络协议栈，另一端连接着物理网卡。只要协议栈中的数据包能被用户态程序截获并加工处理，程序员就有足够的舞台空间去玩出各种花样，譬如数据压缩、流量加密、透明代理等功能都能够以此为基础来实现，以最典型的 VPN 应用程序为例，程序发送给 tun 设备的数据包，会经过如图 12-3 所示的顺序流进 VPN 程序：
+**tun 和 tap 是两个相对独立的虚拟网络设备，其中 tap 模拟了以太网设备，操作二层数据包（以太帧），tun 则模拟了网络层设备，操作三层数据包（IP 报文）。使用 tun/tap 设备的目的是实现把来自协议栈的数据包先交由某个打开了`/dev/net/tun`字符设备的用户进程处理后，再把数据包重新发回到链路中。`你可以通俗地将它理解为这块虚拟化网卡驱动一端连接着网络协议栈，另一端连接着用户态程序，而普通的网卡驱动则是一端连接则网络协议栈，另一端连接着物理网卡。`**只要协议栈中的数据包能被用户态程序截获并加工处理，程序员就有足够的舞台空间去玩出各种花样，譬如数据压缩、流量加密、透明代理等功能都能够以此为基础来实现，以最典型的 VPN 应用程序为例，程序发送给 tun 设备的数据包，会经过如图 12-3 所示的顺序流进 VPN 程序：
 
 :::center
 ![](./images/tun.png)

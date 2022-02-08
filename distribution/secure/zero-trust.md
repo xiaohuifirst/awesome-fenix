@@ -48,7 +48,7 @@ Google 认为零信任安全模型的最终目标是实现整个基础设施之�
 - 为了强制身份只来源于服务，设计了名为 Application Layer Transport Security（应用层传输安全）的服务认证机制，这是一个用于双向认证和传输加密的系统，自动将服务与它的身份标识符绑定，使得所有服务间流量都不必再使用服务名称、主机 IP 来判断对方的身份。
 - 为了确保服务间不再有默认的信任关系，设计了 Service Access Policy（服务访问策略）来管理一个服务向另一个服务发起请求时所需提供的认证、鉴权和审计策略，并支持全局视角的访问控制与分析，以达成“集中、共享的安全策略实施点”这条原则。
 - 为了实现仅以受信的机器运行来源已知的代码，设计了名为 Binary Authorization（二进制授权）的部署时检查机制，确保在软件供应链的每一个阶段，都符合内部安全检查策略，并对此进行授权与鉴权。同时设计了名为 Host Integrity（宿主机完整性）的机器安全启动程序，在创建宿主机时自动验证包括 BIOS、BMC、Bootloader 和操作系统内核的数字签名。
-- 为了工作负载能够具有强隔离性，设计了名为[gVisor](https://en.wikipedia.org/wiki/GVisor)的轻量级虚拟化方案，这个方案与此前由 Intel 发起的[Kata Containers](https://katacontainers.io/)的思路异曲同工。目的都是解决容器共享操作系统内核而导致隔离性不足的安全缺陷，做法都是为每个容器提供了一个独立的虚拟 Linux 内核，譬如 gVisor 是用 Golang 实现了一个名为[Sentry](https://github.com/google/gvisor/tree/master/pkg/sentry)的能够提供传统操作系统内核的能力的进程，严格来说无论是 gVisor 还是 Kata Containers，尽管披着容器运行时的外衣，但本质上都是轻量级虚拟机。
+- **为了工作负载能够具有强隔离性，设计了名为[gVisor](https://en.wikipedia.org/wiki/GVisor)的轻量级虚拟化方案，这个方案与此前由 Intel 发起的[Kata Containers](https://katacontainers.io/)的思路异曲同工。目的都是解决容器共享操作系统内核而导致隔离性不足的安全缺陷，做法都是为每个容器提供了一个独立的虚拟 Linux 内核，譬如 gVisor 是用 Golang 实现了一个名为[Sentry](https://github.com/google/gvisor/tree/master/pkg/sentry)的能够提供传统操作系统内核的能力的进程，严格来说无论是 gVisor 还是 Kata Containers，尽管披着容器运行时的外衣，但本质上都是轻量级虚拟机。**
 
 作为一名普通的软件开发者，看完 Google 关于零信任安全的论文，或者听完笔者这些简要的转述，了解到即使 Google 也须花费如此庞大的精力才能做到零信任安全，最有可能的感受大概不是对零信任安全心生向往，而是准备对它挥手告别了。哪怕不需要开发、不需要购买，免费将上面 Google 开发的安全组件赠送于你，大多数开发团队恐怕也没有足够的运维能力。
 
